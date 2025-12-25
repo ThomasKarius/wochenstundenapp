@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <title>Wochenstunden App</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#0b2a4a" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <style>
+    body { font-family: Arial, sans-serif; background:#f5f5f5; padding:20px; }
+    h1 { margin-bottom: 10px; }
+    table { width:100%; border-collapse: collapse; background:white; }
+    th, td { border:1px solid #ccc; padding:8px; text-align:center; }
+    th { background:#0b2a4a; color:white; }
+    input { width:100%; box-sizing:border-box; padding:6px; }
+    tfoot td { font-weight:bold; background:#eee; }
+    .box { background:white; padding:15px; margin-bottom:15px; }
+    .small { font-size: 12px; color:#334155; margin-top: 8px; }
+  </style>
+</head>
+<body>
+
+<h1>Wochenstundenbericht</h1>
+
+<div class="box">
+  <div>Diese Seite ist als <b>PWA</b> installierbar (Chrome/Edge: Menü → „App installieren“).</div>
+  <div class="small">Daten bleiben im Browser gespeichert (LocalStorage).</div>
+</div>
+
+<div class="box">
+  Name: <input id="name" placeholder="Name"><br><br>
+  KW: <input id="kw" placeholder="z.B. 52"><br><br>
+  Datum: <input type="date" id="date">
+</div>
+
+<table id="table">
+  <thead>
+    <tr>
+      <th>Tag</th>
+      <th>Start</th>
+      <th>Ende</th>
+      <th>Pause (min)</th>
+      <th>Stunden</th>
+    </tr>
+  </thead>
+  <tbody id="tbody"></tbody>
+  <tfoot>
+    <tr>
+      <td colspan="4">Summe</td>
+      <td id="sum">00:00</td>
+    </tr>
+  </tfoot>
+</table>
+
+<script>
+const days = ["Montag","Dienstag","Mittwoch","Donnerstag","Freitag","Samstag"];
+const tbody = document.getElementById("tbody");
+
+function rowTemplate(day){
+  const tr = document.createElement("tr");
+  tr.innerHTML = `
+    <td>${day}</td>
+    <td><input type="time" class="start"></td>
+    <td><input type="time" class="end"></td>
+    <td><input type="number" class="pause" value="0" min="0"></td>
+    <td class="hours">00:00</td>
+  `;
+  return tr;
+}
+days.forEach(d => tbody.appendChild(rowTemplate(d)));
+
+function toMin(t){
+  if(!t) return 0;
+  const [h,m]=t.split(":").map(Number);
+  return h*60+m;
+}
+function toHHMM(m){
+  const h=Math.floor(m/60);
+  const mm=m%60;
+  return String(h).padStart(2,"0")+":"+String(mm).padStart(2,"0");
+}
+function calc(){
+  let total=0;
+  document.querySelectorAll("#table tbody tr").forEach(r=>{
+    const s=toMin(r.querySelector(".start").value);
+    const e=toMin(r.querySelector(".end").value);
+    const p=parseInt(r.querySelector(".pause").value||0);
+    let d=e-s-p;
+    if(d<0) d=0;
+    r.querySelector(".hours").innerText=toHHMM(d);
+    total+=d;
+  });
+  document.getElementById("sum").innerText=toHHMM(total);
+  save();
+}
+document.addEventListener("input", calc);
+
+// Persist simple fields
+const key = "wochenstunden-pwa:v1";
+function save(){
+  const data = {
+    name: document.getElementById("name").value,
+    kw: document.getElementById("kw").value,
+    date: document.getElementById("date").value,
+    rows: Array.from(document.querySelectorAll("#table tbody tr")).map(r=>({
+      start: r.querySelector(".start").value,
+      end: r.querySelector(".end").value,
+      pause: r.querySelector(".pause").value
+    }))
+  };
+  localStorage.setItem(key, JSON.stringify(data));
+}
+function load(){
+  const raw = localStorage.getItem(key);
+  if(!raw) return;
+  try{
+    const data = JSON.parse(raw);
+    document.getElementById("name").value = data.name || "";
+    document.getElementById("kw").value = data.kw || "";
+    document.getElementById("date").value = data.date || "";
+    const trs = document.querySelectorAll("#table tbody tr");
+    (data.rows || []).forEach((rr,i)=>{
+      if(!trs[i]) return;
+      trs[i].querySelector(".start").value = rr.start || "";
+      trs[i].querySelector(".end").value = rr.end || "";
+      trs[i].querySelector(".pause").value = rr.pause || "0";
+    });
+  }catch(e){}
+}
+load();
+calc();
+
+// Register service worker
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("./sw.js");
+  });
+}
+</script>
+
+</body>
+</html>
